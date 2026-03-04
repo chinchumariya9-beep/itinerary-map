@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Itinerary Map</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" />
+
+    <style>
+        body { margin: 0; display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; background: #f0f2f5; }
+        
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #e8f4f8; display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .login-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 300px; text-align: center; }
+        .login-box h2 { margin-top: 0; color: #003366; }
+        .login-box select, .login-box input { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .login-box button { width: 100%; padding: 10px; background: #ff9800; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
+
+        #sidebar { width: 320px; background: #fff; border-right: 1px solid #ddd; display: none; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.1); z-index: 1000; overflow-y: auto; }
+        .sidebar-header { padding: 15px; background: #f8f9fa; border-bottom: 1px solid #ddd; text-align: center; }
+        .sidebar-header h3 { margin: 0; color: #003366; }
+        .user-badge { font-size: 12px; background: #003366; color: white; padding: 2px 8px; border-radius: 10px; margin-top: 5px; display: inline-block; }
+        
+        .sidebar-content { padding: 15px; flex: 1; }
+        .stop-row { position: relative; background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #e9ecef; }
+        
+        .btn-delete {
+            position: absolute; top: 8px; right: 8px; background: #ff4d4d; color: white;
+            border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 12px;
+            cursor: pointer; display: flex; justify-content: center; align-items: center; padding: 0;
+            margin: 0; transition: 0.2s; z-index: 10;
+        }
+        .btn-delete:hover { background: #cc0000; }
+
+        .input-group { position: relative; margin-bottom: 8px; }
+        label { font-size: 11px; color: #666; font-weight: bold; display: block; margin-bottom: 4px; text-transform: uppercase; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 14px; }
+        
+        /* Autocomplete Styles */
+        .autocomplete-list {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: white; border: 1px solid #ddd; border-top: none;
+            z-index: 1001; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-height: 180px; overflow-y: auto; margin-top: -2px;
+        }
+        .autocomplete-item {
+            padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; background: #fff; line-height: 1.4;
+        }
+        .autocomplete-item:last-child { border-bottom: none; }
+        .autocomplete-item:hover { background: #f0f2f5; }
+        .autocomplete-item strong { color: #003366; font-size: 13px; }
+        .autocomplete-item span { font-size: 11px; color: #666; display: block; margin-top: 2px; }
+
+        button { width: 100%; padding: 12px; margin-top: 5px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-add { background: #28a745; color: white; }
+        .btn-gen { background: #003366; color: white; margin-top: 15px; }
+        .btn-export { background: #ff9900; color: white; margin-top: 10px; }
+        .btn-reset { background: #dc3545; color: white; margin-top: 10px; }
+        button:hover { opacity: 0.9; }
+
+        #map { flex: 1; background: #eef2f5; display: none; }
+
+        .map-label { 
+            font-size: 16px; 
+            font-weight: bold; 
+            color: #003366; 
+            text-shadow: 2px 0 #fff, -2px 0 #fff, 0 2px #fff, 0 -2px #fff, 1px 1px #fff, -1px -1px #fff, 1px -1px #fff, -1px 1px #fff; 
+            white-space: nowrap; 
+            text-align: center;
+        }
+        
+        .vehicle-icon-div { display: flex; justify-content: center; align-items: center; z-index: 500 !important; }
+        .vehicle-symbol { display: flex; justify-content: center; align-items: center; background: #eef2f5; padding: 4px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.15); width: 22px; height: 22px; }
+        
+        #crop-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .crop-container { width: 80%; height: 70%; background: white; padding: 10px; border-radius: 8px; }
+        img#image-to-crop { max-width: 100%; max-height: 100%; display: block; }
+        .crop-actions { margin-top: 15px; display: flex; gap: 10px; }
+        .crop-actions button { width: auto; padding: 10px 20px; }
+        .btn-close { background: #dc3545; color: white; }
+        #loader { display: none; color: white; margin-bottom: 15px; font-weight: bold; font-size: 18px; }
+    </style>
+</head>
+<body>
+
+<div id="login-screen">
+    <div class="login-box">
+        <h2>Login</h2>
+        <select id="user-role">
+            <option value="admin">Admin</option>
+            <option value="user">User</option>
+        </select>
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="checkLogin()">Enter</button>
+        <p style="font-size:12px; color:#666; margin-top:10px;">(Admin Pass: admin123 | User Pass: user123)</p>
+    </div>
+</div>
+
+<div id="sidebar">
+    <div class="sidebar-header">
+        <h3>MV Map Builder</h3>
+        <span class="user-badge" id="role-display">Admin Mode</span>
+    </div>
+    
+    <div class="sidebar-content">
+        <div id="inputs-container">
+            <div class="stop-row">
+                <div class="input-group">
+                    <label>Start Location:</label>
+                    <input type="text" class="loc-input" value="Location" placeholder="Type city name...">
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-add" onclick="addNextStop()">+ Add Destination</button>
+        <button class="btn-gen" onclick="generateRoute()">1. Generate Map</button>
+        <button class="btn-export" onclick="openCropModal()">2. Export High-Res Map</button>
+        <button class="btn-reset" onclick="resetMap()">3. Reset All</button>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<div id="crop-modal">
+    <div id="loader">Generating High-Quality Map, please wait...</div>
+    <div class="crop-container" id="crop-area" style="display:none;">
+        <img id="image-to-crop" src="">
+    </div>
+    <div class="crop-actions" id="crop-buttons" style="display:none;">
+        <button class="btn-gen" onclick="downloadImage('png')">Download PNG (HD)</button>
+        <button class="btn-gen" onclick="downloadImage('jpeg')">Download JPEG (HD)</button>
+        <button class="btn-close" onclick="closeCropModal()">Cancel</button>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+<script>
+    const svgIcons = {
+        car: '<svg viewBox="0 0 512 512" width="14" height="14"><path fill="#003366" d="M135.2 117.4L109.1 192H402.9l-26.1-74.6C372.3 104.6 360.2 96 346.6 96H165.4c-13.6 0-25.7 8.6-30.2 21.4zM39.6 196.8L74.8 96.3C88.3 57.8 124.6 32 165.4 32H346.6c40.8 0 77.1 25.8 90.6 64.3l35.2 100.5c23.2 9.6 39.6 32.5 39.6 59.2V400v48c0 17.7-14.3 32-32 32H448c-17.7 0-32-14.3-32-32V400H96v48c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32V400 256c0-26.7 16.4-49.6 39.6-59.2zM128 288a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zm288 32a32 32 0 1 0 0-64 32 32 0 1 0 0 64z"/></svg>',
+        plane: '<svg viewBox="0 0 512 512" width="14" height="14"><path fill="#003366" d="M381.8 153.1c11.6-11.6 29.9-13.8 43.8-5.3L461.3 171c11.4 7.1 14.8 22.3 7.7 33.7l-15.6 25c-6 9.6-17.4 13.8-28.1 10.3l-34-11.3L327 343.3l48.4 48.4c6.3 6.3 8.3 15.6 5.2 23.9l-13.7 36.6c-4.4 11.8-17.1 18.2-29 14.3l-81.8-27.3-81.8 27.3c-11.9 3.9-24.6-2.5-29-14.3L131.6 415.6c-3.1-8.3-1.1-17.6 5.2-23.9l48.4-48.4L120.9 228.6l-34 11.3c-10.7 3.5-22.1-.7-28.1-10.3l-15.6-25c-7.1-11.4-3.8-26.6 7.7-33.7L86.6 147.8c13.9-8.5 32.2-6.3 43.8 5.3l124 124 81.3-124zM320 64a64 64 0 1 0 -128 0 64 64 0 1 0 128 0z"/></svg>',
+        bus: '<svg viewBox="0 0 448 512" width="14" height="14"><path fill="#003366" d="M64 32C28.7 32 0 60.7 0 96V352c0 35.3 28.7 64 64 64v32c0 17.7 14.3 32 32 32h32c17.7 0 32-14.3 32-32V416H288v32c0 17.7 14.3 32 32 32h32c17.7 0 32-14.3 32-32V416c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zM96 128H352c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H96c-17.7 0-32-14.3-32-32V160c0-17.7 14.3-32 32-32zm-32 208a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm256 32a32 32 0 1 1 0-64 32 32 0 1 1 0 64z"/></svg>',
+        train: '<svg viewBox="0 0 448 512" width="14" height="14"><path fill="#003366" d="M96 0C43 0 0 43 0 96V352c0 48 35.2 87.7 81.1 94.9l-46 46C28.1 499.9 33.1 512 43 512H405c10 0 15-12.1 7.9-19.1l-46-46c45.9-7.2 81.1-46.9 81.1-94.9V96c0-53-43-96-96-96H96zM64 128c0-17.7 14.3-32 32-32h256c17.7 0 32 14.3 32 32v96c0 17.7-14.3 32-32 32H96c-17.7 0-32-14.3-32-32V128zM128 384a32 32 0 1 1 0-64 32 32 0 1 1 0 64zm224-32a32 32 0 1 1 -64 0 32 32 0 1 1 64 0z"/></svg>',
+        arrow: '<svg viewBox="0 0 320 512" width="12" height="12"><path fill="#666" d="M285.5 273L91.1 467.3c-9.4 9.4-24.6 9.4-33.9 0l-22.7-22.7c-9.4-9.4-9.4-24.5 0-33.9L188.5 256 34.5 101.3c-9.3-9.4-9.3-24.5 0-33.9l22.7-22.7c9.4-9.4 24.6-9.4 33.9 0L285.5 239c9.4 9.4 9.4 24.6 0 34z"/></svg>'
+    };
+
+    function checkLogin() {
+        var role = document.getElementById('user-role').value;
+        var pass = document.getElementById('password').value;
+        if ((role === 'admin' && pass === 'admin123') || (role === 'user' && pass === 'user123')) {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('sidebar').style.display = 'flex';
+            document.getElementById('map').style.display = 'block';
+            document.getElementById('role-display').innerText = role === 'admin' ? 'Admin Mode' : 'User Mode';
+            initMap(); 
+        } else { alert("Incorrect Password!"); }
+    }
+
+    var map, layerGroup;
+
+    function initMap() {
+        map = L.map('map', { preferCanvas: true }).setView([10.8505, 76.2711], 7);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 20,
+            attribution: '© <a href="https://carto.com/">CARTO</a>'
+        }).addTo(map);
+        
+        layerGroup = L.layerGroup().addTo(map);
+    }
+
+    // Autocomplete Setup Function
+    function setupAutocomplete(input) {
+        let timeout = null;
+        input.addEventListener('input', function() {
+            clearTimeout(timeout);
+            let val = this.value;
+            closeAllLists();
+            
+            if (!val || val.length < 2) return false;
+            
+            timeout = setTimeout(async () => {
+                try {
+                    let res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val)}&limit=5`);
+                    let data = await res.json();
+                    
+                    if (data.features.length === 0) return;
+
+                    let list = document.createElement("div");
+                    list.setAttribute("class", "autocomplete-list");
+                    this.parentNode.appendChild(list);
+                    
+                    data.features.forEach(feature => {
+                        let props = feature.properties;
+                        let nameParts = [props.name, props.state, props.country].filter(Boolean);
+                        let uniqueNameParts = [...new Set(nameParts)]; 
+                        let fullName = uniqueNameParts.join(", ");
+                        
+                        let item = document.createElement("div");
+                        item.className = "autocomplete-item";
+                        item.innerHTML = `<strong>${props.name}</strong><span>${fullName}</span>`;
+                        
+                        item.addEventListener("click", function() {
+                            input.value = fullName;
+                            closeAllLists();
+                        });
+                        list.appendChild(item);
+                    });
+                } catch (e) { console.log("Autocomplete error:", e); }
+            }, 300); 
+        });
+    }
+
+    function closeAllLists() {
+        var items = document.getElementsByClassName("autocomplete-list");
+        while(items.length > 0) {
+            items[0].parentNode.removeChild(items[0]);
+        }
+    }
+
+    document.addEventListener("click", function (e) {
+        if (!e.target.matches('.loc-input')) {
+            closeAllLists();
+        }
+    });
+
+    document.addEventListener("DOMContentLoaded", function() {
+        setupAutocomplete(document.querySelector('.loc-input'));
+    });
+
+    // പുതിയതായി ചേർത്ത Delete ഫംഗ്ഷൻ
+    function removeDestination(btn) {
+        var row = btn.parentNode;
+        if (row && row.classList.contains('stop-row')) {
+            row.parentNode.removeChild(row);
+        }
+    }
+
+    function addNextStop() {
+        var div = document.createElement('div');
+        div.className = 'stop-row';
+        div.innerHTML = `
+            <button type="button" class="btn-delete" onclick="removeDestination(this)" title="Delete Destination">✕</button>
+            <div class="input-group">
+                <label>Travel Mode:</label>
+                <select class="mode-select">
+                    <option value="car">Car 🚗</option>
+                    <option value="bus">Bus 🚌</option>
+                    <option value="train">Train 🚂</option>
+                    <option value="plane">Flight ✈️</option>
+                    <option value="none">No Icon (Line Only)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Next Location:</label>
+                <input type="text" class="loc-input" placeholder="Type city name...">
+            </div>
+        `;
+        document.getElementById('inputs-container').appendChild(div);
+        
+        var newInputs = div.getElementsByClassName('loc-input');
+        setupAutocomplete(newInputs[0]);
+    }
+
+    function resetMap() {
+        if(layerGroup) layerGroup.clearLayers();
+        document.getElementById('inputs-container').innerHTML = `
+            <div class="stop-row">
+                <div class="input-group">
+                    <label>Start Location:</label>
+                    <input type="text" class="loc-input" value="" placeholder="Type city name...">
+                </div>
+            </div>
+        `;
+        setupAutocomplete(document.querySelector('.loc-input'));
+        map.setView([10.8505, 76.2711], 7);
+    }
+
+    async function generateRoute() {
+        if(!layerGroup) return;
+        layerGroup.clearLayers();
+        var locInputs = document.getElementsByClassName('loc-input');
+        var modeInputs = document.getElementsByClassName('mode-select');
+        var points = [];
+
+        for (var i = 0; i < locInputs.length; i++) {
+            var name = locInputs[i].value;
+            if (name.trim() !== "") {
+                var coords = await getCoords(name);
+                if (coords) points.push({ coords: coords, name: name, mode: i > 0 ? modeInputs[i-1].value : null });
+            }
+        }
+
+        if (points.length < 2) return alert("Add at least 2 locations.");
+
+        var isRoundTrip = points[0].name.toLowerCase().trim() === points[points.length - 1].name.toLowerCase().trim();
+
+        for (var i = 0; i < points.length; i++) {
+            var curr = points[i];
+            
+            var isStart = (i === 0);
+            var isEnd = (i === points.length - 1);
+            var dotStyle = "width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 3px rgba(0,0,0,0.5);";
+            var bgStyle = "background: #003366;"; 
+
+            if (isStart && isRoundTrip) {
+                bgStyle = "background: linear-gradient(90deg, #28a745 50%, #dc3545 50%);"; 
+            } else if (isStart) {
+                bgStyle = "background: #28a745;"; 
+            } else if (isEnd) {
+                bgStyle = isRoundTrip ? "background: linear-gradient(90deg, #28a745 50%, #dc3545 50%);" : "background: #dc3545;"; 
+            }
+
+            L.marker(curr.coords, {
+                icon: L.divIcon({ 
+                    className: '', 
+                    html: `<div style="${dotStyle} ${bgStyle}"></div>`, 
+                    iconSize: [16, 16], 
+                    iconAnchor: [8, 8] 
+                })
+            }).addTo(layerGroup);
+
+            L.marker(curr.coords, { 
+                icon: L.divIcon({ 
+                    className: 'map-label', 
+                    html: curr.name.split(',')[0], 
+                    iconSize: [120, 20], 
+                    iconAnchor: [60, 25] 
+                }),
+                interactive: false
+            }).addTo(layerGroup);
+
+            if (i > 0) {
+                var prev = points[i-1];
+                
+                L.polyline([prev.coords, curr.coords], { color: '#666', weight: 2, dashArray: '8, 8' }).addTo(layerGroup);
+                
+                var hasVehicle = (curr.mode !== 'none');
+                
+                if (hasVehicle) {
+                    addIcon(prev.coords, curr.coords, curr.mode, 0.35); 
+                    addDirectionArrow(prev.coords, curr.coords, 0.70);  
+                } else {
+                    addDirectionArrow(prev.coords, curr.coords, 0.50);  
+                }
+            }
+        }
+        map.fitBounds(points.map(p => p.coords), {padding: [80, 80]});
+    }
+
+    async function getCoords(city) {
+        try {
+            await new Promise(resolve => setTimeout(resolve, 1000)); 
+            
+            var res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`);
+            var data = await res.json();
+            return data[0] ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] : null;
+        } catch (e) { 
+            return null; 
+        }
+    }
+
+    function addDirectionArrow(start, end, positionFactor) {
+        var p1 = map.latLngToContainerPoint(start);
+        var p2 = map.latLngToContainerPoint(end);
+        var angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI);
+
+        var arrLat = start[0] + positionFactor * (end[0] - start[0]);
+        var arrLng = start[1] + positionFactor * (end[1] - start[1]);
+
+        L.marker([arrLat, arrLng], {
+            icon: L.divIcon({ 
+                className: '', 
+                html: `<div style="transform: rotate(${angle}deg); background: #fff; border-radius: 50%; width: 16px; height: 16px; display: flex; justify-content: center; align-items: center; border: 1px solid rgba(0,0,0,0.15); box-shadow: 0 1px 3px rgba(0,0,0,0.2);">${svgIcons.arrow}</div>`, 
+                iconSize: [16, 16], 
+                iconAnchor: [8, 8] 
+            }),
+            interactive: false
+        }).addTo(layerGroup);
+    }
+
+    function addIcon(start, end, type, positionFactor) {
+        var lat = start[0] + positionFactor * (end[0] - start[0]);
+        var lng = start[1] + positionFactor * (end[1] - start[1]);
+        var selectedSvg = type === 'plane' ? svgIcons.plane : type === 'bus' ? svgIcons.bus : type === 'train' ? svgIcons.train : svgIcons.car;
+        
+        L.marker([lat, lng], {
+            icon: L.divIcon({ 
+                className: 'vehicle-icon-div', 
+                html: `<div class="vehicle-symbol" style="box-shadow: 0 1px 4px rgba(0,0,0,0.2);">${selectedSvg}</div>`, 
+                iconSize: [26, 26], 
+                iconAnchor: [13, 13] 
+            })
+        }).addTo(layerGroup);
+    }
+
+    var cropper;
+    function openCropModal() {
+        var mapElement = document.getElementById('map');
+        document.getElementById('crop-modal').style.display = 'flex';
+        document.getElementById('loader').style.display = 'block';
+        document.getElementById('crop-area').style.display = 'none';
+        document.getElementById('crop-buttons').style.display = 'none';
+
+        var scale = 3; 
+
+        domtoimage.toPng(mapElement, {
+            height: mapElement.offsetHeight * scale,
+            width: mapElement.offsetWidth * scale,
+            style: {
+                transform: "scale(" + scale + ")",
+                transformOrigin: "top left",
+                width: mapElement.offsetWidth + "px",
+                height: mapElement.offsetHeight + "px"
+            }
+        })
+        .then(function (dataUrl) {
+            var imgElement = document.getElementById('image-to-crop');
+            imgElement.src = dataUrl;
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('crop-area').style.display = 'block';
+            document.getElementById('crop-buttons').style.display = 'flex';
+
+            if(cropper) cropper.destroy();
+            cropper = new Cropper(imgElement, { viewMode: 1, autoCropArea: 0.9, background: false });
+        })
+        .catch(function (error) { alert("Map export failed."); closeCropModal(); });
+    }
+
+    function closeCropModal() {
+        document.getElementById('crop-modal').style.display = 'none';
+        if(cropper) cropper.destroy();
+    }
+
+    function downloadImage(format) {
+        if (!cropper) return;
+        var croppedCanvas = cropper.getCroppedCanvas({ imageSmoothingEnabled: true, imageSmoothingQuality: 'high' });
+        var link = document.createElement('a');
+        link.download = `High_Res_Itinerary.${format}`;
+        link.href = croppedCanvas.toDataURL(format === 'jpeg' ? 'image/jpeg' : 'image/png', 1.0);
+        link.click();
+        closeCropModal();
+    }
+</script>
+
+</body>
+</html>
